@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>My Travel</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="leaflet.css" />
+<link rel="stylesheet" href="leaflet.label.css" />
+
+<script src="myflights.js"></script>
+<script src="mylocation.js"></script>
+<script src="mytracks.js"></script>
+<script src="mywaypoints.js"></script>
+
+<script src="leaflet.js"></script>
+<script src="Leaflet.Geodesic.js"></script>
+<script src="leaflet.label.js"></script>
+<script src="Polyline.encoded.js"></script>
+<script src="leaflet.textpath.js"></script>
+
+</head>
+<body style="margin:0px;padding:0px">
+<div id="map" style="position:fixed;width:100%; height:100%"></div>
+
+<script>
+var xhr = new XMLHttpRequest(); //https://docs.google.com/document/export?format=txt&id=1L9xNmdpEpzcSrFXHtxHPXbu0SFJvFbjLlpa-lPBpUlo
+xhr.open('GET', 'https://docs.google.com/document/export?format=txt&id=1L9xNmdpEpzcSrFXHtxHPXbu0SFJvFbjLlpa-lPBpUlo', true);
+xhr.onload = function() {
+   console.log(xhr);
+};
+xhr.send();
+
+/**
+Builds LeafletJS map based on segment coordinates
+**/
+var MapBuilder = function () {
+   var waypointIcon = L.icon({
+       iconUrl: 'images/dot-orange.png',
+       shadowUrl: null,
+       iconSize: [16, 16],
+       iconAnchor: [8, 8] // point of the icon which will correspond to marker's location
+   });
+   
+   var waypointHoverIcon = L.icon({
+      iconUrl: 'images/hover-dot-orange.png',
+      shadowUrl: null,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+   });
+   
+   var map;
+   var map_bounds = new L.LatLngBounds();
+   
+   var buildMap = function(start) {
+      var start_coord = new L.LatLng(0, 0);
+      if (typeof start !== 'undefined')
+      {
+         start_coord = new L.LatLng(start.lat, start.lng);
+      }
+
+      // init map
+      map = L.map('map', { zoomControl: true, worldCopyJump: true }).setView([start_coord.lat, start_coord.lng], 3);
+
+      // create the tile layer with correct attribution
+      var osmUrl = 'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      var osmAttrib = 'Map data © OpenStreetMap contributors';
+      var osm = new L.TileLayer(osmUrl, { attribution: osmAttrib });
+
+      map.addLayer(osm);
+   };
+
+   var buildFlight = function (from, to) {
+      // build Leaflet coordinates from GPS
+      var from_coord = new L.LatLng(from.lat, from.lng);
+      var to_coord = new L.LatLng(to.lat, to.lng);
+
+      var geodesic = L.geodesic([[from_coord, to_coord]], {
+            weight: 7, 
+            opacity: 0.5,
+            color: 'blue',
+            steps: 50
+         }).addTo(map);
+      
+      return geodesic.setText('  ✈', {repeat: true, attributes: {'font-size':18, fill:'black'}});
+   };
+
+   var showRouteDirection = function(path) {
+      return path.setText('>', {repeat: true, attributes: {'font-size':'14', fill:'black'}});
+   }
+   
+   return {
+      init: function () {
+         // create Leaflet map
+         buildMap();
+
+         // add great circle flight segments
+         for(i in flights) {
+            buildFlight(flights[i].from, flights[i].to);
+         }
+         
+         // add routed tracks
+         for (i in tracks) {
+            var track = tracks[i];
+            if (track.encoded) {
+               showRouteDirection(L.Polyline.fromEncoded(track.path)).addTo(map);
+            } else {
+               showRouteDirection(L.polyline(track.path)).addTo(map);
+            }
+         }
+         
+         for (i in waypoints) {
+            var waypoint = waypoints[i]; 
+            L.marker(waypoint.latlng, { icon:waypointIcon}).bindLabel(waypoint.label, {offset:[12,-15]})
+            .on('mouseover', function(e) {
+               e.target.setIcon(waypointHoverIcon);
+            }).on('mouseout', function(e) {
+               e.target.setIcon(waypointIcon);
+            }).addTo(map);
+
+            map_bounds.extend(waypoint.latlng);
+         }
+                 
+         // add current location
+         for (i in current_locations) {
+            var location = current_locations[i];
+            L.marker(new L.LatLng(location.lat, location.lng)).bindLabel(location.who).addTo(map);
+         }
+         
+         // zoom to fit all waypoints
+         map.fitBounds(map_bounds, { padding: [20, 20] });
+      }
+   };
+
+}();
+
+// init MapBuilder when page is ready
+(function() {
+   MapBuilder.init();
+})();
+</script>
+</body>
+</html>
+
